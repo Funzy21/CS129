@@ -1,2 +1,2 @@
-# CS129
-Team's repository for our CS129 course.
+# CS129 Project Repo
+Team Amadeus's repository for project Ting!
