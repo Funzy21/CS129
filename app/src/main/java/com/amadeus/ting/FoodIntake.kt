@@ -2,6 +2,9 @@ package com.amadeus.ting;
 
 
 import android.app.Activity
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.app.PendingIntent.FLAG_IMMUTABLE
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -31,8 +34,6 @@ class FoodIntake : AppCompatActivity(), CalendarAdapter.OnDateClickListener {
     // Initializing horizontal calendar
     private lateinit var binding: ActivityFoodIntakeBinding
     private lateinit var calendarAdapter: CalendarAdapter
-    private lateinit var tskList: List<TaskModel>
-
 
     private lateinit var databaseTing: TingDatabase
     private val calendarData = CalendarData()
@@ -77,7 +78,9 @@ class FoodIntake : AppCompatActivity(), CalendarAdapter.OnDateClickListener {
     private lateinit var timeToEatMinutes: Array<Int>
     private lateinit var timeToEatMeridiem: Array<String>
 
-    private var selectedWakeupTime: String? = null
+    private lateinit var alarmManager: AlarmManager
+    private lateinit var intent: Intent
+    private var pendingIntent: PendingIntent? = null
 
     @RequiresApi(Build.VERSION_CODES.S)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -124,10 +127,45 @@ class FoodIntake : AppCompatActivity(), CalendarAdapter.OnDateClickListener {
             Toast.makeText(this, "Reset My Day Clicked!", Toast.LENGTH_SHORT).show()
         }
 
-        // setupAlarm()
+        alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        intent = Intent(this, ResetListReceiver::class.java)
+        pendingIntent = PendingIntent.getBroadcast(this, 0, intent, FLAG_IMMUTABLE)
+
+        // Get WakeTime Data
+        val sleepSharedPref = getSharedPreferences("SleepData", Context.MODE_PRIVATE)
+        val wakeTimeFromSleep = sleepSharedPref.getString("WakeTime", null)
+
+        val wakeTimeParts = wakeTimeFromSleep?.split(":")
+        var wakeHour = wakeTimeParts?.get(0)?.toIntOrNull()
+        val wakeMinute = wakeTimeParts?.get(1)?.substringBefore(" ")?.toIntOrNull()
+        val wakeAMPM = wakeTimeParts?.get(1)?.substringAfter(" ")?.trim()
+
+        if (wakeHour != null && wakeMinute != null && wakeAMPM != null) {
+            if (wakeAMPM == "PM" && wakeHour == 12) { wakeHour = 12 } else { if (wakeAMPM == "PM") { wakeHour += 12 } }
+
+            val currentTime = Calendar.getInstance()
+            val scheduledTime = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, wakeHour)
+                set(Calendar.MINUTE, wakeMinute)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+                if (before(currentTime)) { // Adjust the scheduled time if it's already passed today
+                    add(Calendar.DAY_OF_MONTH, 1)
+                }
+            }
+            println("========== scheduledTime: $scheduledTime")
+
+            // Schedule the task
+            if (mealsPerDay != 0 && foodScheduleList[0].timeIntervalColon != "" && foodScheduleList[0].timeIntervalHours != 0) {
+                println("==================== setAlarm!!!!!!!!!")
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, scheduledTime.timeInMillis, pendingIntent)
+            }
+        }
+
+
     }
 
-    fun resetList() {
+    private fun resetList() {
 
         foodScheduleList = arrayListOf<FoodIntakeInfo>()
 
@@ -197,7 +235,7 @@ class FoodIntake : AppCompatActivity(), CalendarAdapter.OnDateClickListener {
     }
 
     // retrieves the values stored in the shared preferences
-    fun getSharedPreferencesValues(prefs: SharedPreferences, i: Int) {
+    private fun getSharedPreferencesValues(prefs: SharedPreferences, i: Int) {
         editTimeVisibility[i] = prefs.getBoolean("editTimeVisible_${i}", true)
         eatButtonVisibility[i] = prefs.getBoolean("eatButtonVisible_${i}", true)
         checkVisibility[i] = prefs.getBoolean("checkVisible_${i}", false)
@@ -234,8 +272,6 @@ class FoodIntake : AppCompatActivity(), CalendarAdapter.OnDateClickListener {
         // Center snap for scrolling
         val snapHelper: SnapHelper = LinearSnapHelper()
         snapHelper.attachToRecyclerView(binding.calendarRecycler)
-
-
 
         calendarAdapter = CalendarAdapter({ _: CalendarDateModel, position ->
             calendarData.calendarList.forEachIndexed { index, calendarModel ->
@@ -349,37 +385,39 @@ class FoodIntake : AppCompatActivity(), CalendarAdapter.OnDateClickListener {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
+        println("====================== onBackPressed Food")
+        val sleepSharedPref = getSharedPreferences("SleepData", Context.MODE_PRIVATE)
+        val wakeTimeFromSleep = sleepSharedPref.getString("WakeTime", null)
+
+        val wakeTimeParts = wakeTimeFromSleep?.split(":")
+        var wakeHour = wakeTimeParts?.get(0)?.toIntOrNull()
+        val wakeMinute = wakeTimeParts?.get(1)?.substringBefore(" ")?.toIntOrNull()
+        val wakeAMPM = wakeTimeParts?.get(1)?.substringAfter(" ")?.trim()
+
+        if (wakeHour != null && wakeMinute != null && wakeAMPM != null) {
+            if (wakeAMPM == "PM" && wakeHour == 12) { wakeHour = 12 } else { if (wakeAMPM == "PM") { wakeHour += 12 } }
+
+            val currentTime = Calendar.getInstance()
+            val scheduledTime = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, wakeHour)
+                set(Calendar.MINUTE, wakeMinute)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+                if (before(currentTime)) { // Adjust the scheduled time if it's already passed today
+                    add(Calendar.DAY_OF_MONTH, 1)
+                }
+            }
+            println("========== scheduledTime: $scheduledTime")
+
+            // Schedule the task
+            if (mealsPerDay != 0 && foodScheduleList[0].timeIntervalColon != "" && foodScheduleList[0].timeIntervalHours != 0) {
+                println("==================== setAlarm!!!!!!!!!")
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, scheduledTime.timeInMillis, pendingIntent)
+            }
+        }
         val intent = Intent(this, HomePage::class.java)
         startActivity(intent)
         finish()
     }
-
-
-//    private fun setupAlarm() {
-//        println("=============== setUpAlarm()")
-//        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-//        val alarmIntent = Intent(this, ResetListReceiver::class.java)
-//        val pendingIntent = PendingIntent.getBroadcast(this, 0, alarmIntent, PendingIntent.FLAG_MUTABLE)
-//
-//        // Get WakeTime Data
-//        val sleepSharedPref = getSharedPreferences("SleepData", Context.MODE_PRIVATE)
-//        val wakeTimeFromSleep = sleepSharedPref.getString("WakeTime", null)
-//
-//        val wakeTimeParts = wakeTimeFromSleep?.split(":")
-//        val wakeHour = wakeTimeParts?.get(0)?.toIntOrNull()
-//        val wakeMinute = wakeTimeParts?.get(1)?.substringBefore(" ")?.toIntOrNull()
-//
-//        val calendar = Calendar.getInstance()
-//        if (wakeHour != null) {
-//            calendar.set(Calendar.HOUR_OF_DAY, wakeHour)
-//        }
-//        if (wakeMinute != null) {
-//            calendar.set(Calendar.MINUTE, wakeMinute)
-//        }
-//        calendar.set(Calendar.SECOND, 0)
-//
-//        // Schedule a repeating alarm that triggers at the specified time every day
-//        alarmManager.setRepeating(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, AlarmManager.INTERVAL_DAY, pendingIntent)
-//    }
 }
 

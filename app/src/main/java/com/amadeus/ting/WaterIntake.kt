@@ -2,7 +2,9 @@ package com.amadeus.ting
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.AlarmManager
 import android.app.AlertDialog
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -60,6 +62,10 @@ class WaterIntake : AppCompatActivity(), CalendarAdapter.OnDateClickListener {
     private lateinit var dialogView : View
 
     private val calendarData = CalendarData()
+
+    private lateinit var alarmManager: AlarmManager
+    private lateinit var intent: Intent
+    private var pendingIntent: PendingIntent? = null
 
     @SuppressLint("MissingInflatedId", "UseCompatLoadingForDrawables", "SetTextI18n",
         "InflateParams", "CutPasteId"
@@ -124,6 +130,20 @@ class WaterIntake : AppCompatActivity(), CalendarAdapter.OnDateClickListener {
         goalText.setOnClickListener {
             waterSectionAlertDialog.intakeGoalDialog(this, R.layout.water_popupwindow) { userMilliliterInput ->
                 if (userMilliliterInput != null) {
+                    // Reset records
+                    val editor = prefs.edit()
+                    editor.clear()
+
+                    progressBar.progress = 0
+                    numberPercent.text = "0%"
+                    currentPercentage = 0
+                    totalMilliliter = 0
+                    index = 0
+                    milliliterLeft = milliliterGoal
+                    seekBar.max = milliliterGoal
+                    numberMLLeft.text = "$milliliterLeft ml left"
+
+                    // Set the records depending on the input
                     milliliterGoal = userMilliliterInput
                     milliliterLeft = userMilliliterInput
                     seekBar.max = milliliterGoal
@@ -131,7 +151,6 @@ class WaterIntake : AppCompatActivity(), CalendarAdapter.OnDateClickListener {
                     drinkTextView.text = "Drink $milliliterGoal ml" // Updates the number of milliliter value
                     numberMLLeft.text = "$milliliterGoal ml left"
 
-                    val editor = prefs.edit()
                     editor.putInt("milliliterGoal", milliliterGoal)
                     editor.putInt("milliliterLeft", milliliterGoal)
                     editor.apply()
@@ -197,20 +216,14 @@ class WaterIntake : AppCompatActivity(), CalendarAdapter.OnDateClickListener {
                 if (timeArray.isEmpty() && numberOfLitersArray.isEmpty()) {
                     timeArray[0] = String.format("%02d:%02d %s", hours, minutes, amPm)
                     numberOfLitersArray[0]= "$temp ml"
-
                     editor.putString("waterIntakeInfoTime_0", "$hours:$minutes $amPm")
                     editor.putString("waterIntakeInfoNumberOfLiters_0", "$temp ml")
-                    val tempWater = WaterIntakeModel("$month ${dayOfMonth - 1} $year", index, "$hours:$minutes $amPm", "$temp ml")
-                    databaseTing.addWaterData(tempWater)
                     index++
                 } else {
                     timeArray[index] = String.format("%02d:%02d %s", hours, minutes, amPm)
                     numberOfLitersArray[index]= "$temp ml"
-
                     editor.putString("waterIntakeInfoTime_$index", "$hours:$minutes $amPm")
                     editor.putString("waterIntakeInfoNumberOfLiters_$index", "$temp ml")
-                    val tempWater = WaterIntakeModel("$month ${dayOfMonth - 1} $year", index, "$hours:$minutes $amPm", "$temp ml")
-                    databaseTing.addWaterData(tempWater)
                     index++
                 }
 
@@ -256,6 +269,41 @@ class WaterIntake : AppCompatActivity(), CalendarAdapter.OnDateClickListener {
         onClick<ShapeableImageView>(R.id.back_button){
             val goToHomePage = Intent(this, HomePage::class.java)
             startActivity(goToHomePage)
+        }
+
+        alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        intent = Intent(this, ResetListReceiverWater::class.java)
+        pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+
+        // Get WakeTime Data
+        val sleepSharedPref = getSharedPreferences("SleepData", Context.MODE_PRIVATE)
+        val wakeTimeFromSleep = sleepSharedPref.getString("WakeTime", null)
+
+        val wakeTimeParts = wakeTimeFromSleep?.split(":")
+        var wakeHour = wakeTimeParts?.get(0)?.toIntOrNull()
+        val wakeMinute = wakeTimeParts?.get(1)?.substringBefore(" ")?.toIntOrNull()
+        val wakeAMPM = wakeTimeParts?.get(1)?.substringAfter(" ")?.trim()
+
+        if (wakeHour != null && wakeMinute != null && wakeAMPM != null) {
+            if (wakeAMPM == "PM" && wakeHour == 12) { wakeHour = 12 } else { if (wakeAMPM == "PM") { wakeHour += 12 } }
+
+            val currentTime = Calendar.getInstance()
+            val scheduledTime = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, wakeHour)
+                set(Calendar.MINUTE, wakeMinute)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+                if (before(currentTime)) { // Adjust the scheduled time if it's already passed today
+                    add(Calendar.DAY_OF_MONTH, 1)
+                }
+            }
+            println("========== scheduledTime: $scheduledTime")
+
+            // Schedule the task
+            if (milliliterGoal != 0 && index != 0) {
+                println("==================== setAlarmWater!!!!!!!!!")
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, scheduledTime.timeInMillis, pendingIntent)
+            }
         }
 
     }
@@ -441,6 +489,44 @@ class WaterIntake : AppCompatActivity(), CalendarAdapter.OnDateClickListener {
 
         return "$month $day $year"
 
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        // Get WakeTime Data
+        println("=================================== onBackPressed mealtime")
+        val sleepSharedPref = getSharedPreferences("SleepData", Context.MODE_PRIVATE)
+        val wakeTimeFromSleep = sleepSharedPref.getString("WakeTime", null)
+
+        val wakeTimeParts = wakeTimeFromSleep?.split(":")
+        var wakeHour = wakeTimeParts?.get(0)?.toIntOrNull()
+        val wakeMinute = wakeTimeParts?.get(1)?.substringBefore(" ")?.toIntOrNull()
+        val wakeAMPM = wakeTimeParts?.get(1)?.substringAfter(" ")?.trim()
+
+        if (wakeHour != null && wakeMinute != null && wakeAMPM != null) {
+            if (wakeAMPM == "PM" && wakeHour == 12) { wakeHour = 12 } else { if (wakeAMPM == "PM") { wakeHour += 12 } }
+
+            val currentTime = Calendar.getInstance()
+            val scheduledTime = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, wakeHour)
+                set(Calendar.MINUTE, wakeMinute)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+                if (before(currentTime)) { // Adjust the scheduled time if it's already passed today
+                    add(Calendar.DAY_OF_MONTH, 1)
+                }
+            }
+            println("========== scheduledTime: $scheduledTime")
+
+            // Schedule the task
+            if (milliliterGoal != 0 && index != 0) {
+                println("==================== setAlarmWater!!!!!!!!!")
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, scheduledTime.timeInMillis, pendingIntent)
+            }
+        }
+        val intent = Intent(this, HomePage::class.java)
+        startActivity(intent)
+        finish()
     }
 }
 
