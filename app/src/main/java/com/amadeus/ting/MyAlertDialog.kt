@@ -1,32 +1,52 @@
 package com.amadeus.ting
 
 import android.app.Activity
+import android.app.AlarmManager
 import android.app.AlertDialog
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Context.ALARM_SERVICE
 import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
+import android.os.Build
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.*
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.content.ContextCompat.startActivity
+import java.text.SimpleDateFormat
+import java.util.*
+import kotlin.collections.ArrayList
 
 
-class MyAlertDialog {
+class MyAlertDialog{
 
     private var taskadapter: TaskAdapter? = null
 
     private lateinit var dbHelper: TingDatabase
     private lateinit var dialogLayout: View
     private lateinit var nestedDialogLayout: View
+    private lateinit var pendingIntent: PendingIntent
 
     private var isAlphabeticalArrowUp = 1
     private var isDeadlineArrowUp = 1
+    private var onCreateTaskListener: OnCreateTaskListener ?=null
 
     private var taskList: List<TaskModel> = ArrayList()
     private var buttonPressed = -1
 
+    public interface OnCreateTaskListener{
+        fun onCreateTask(task: TaskModel)
+    }
+
+    fun setOnCreateTaskListener(listener: OnCreateTaskListener){
+        onCreateTaskListener = listener
+    }
     fun showCustomDialog(context: Context, popupLayout: Int, nestedPopupLayout: Int = -1, buttonToPress: Int = -1, create: Int = -1) {
         val inflater = LayoutInflater.from(context)
         val dialogLayout = inflater.inflate(popupLayout, null)
@@ -52,7 +72,6 @@ class MyAlertDialog {
             dateOpt.pickDate()
 
             // Create a new task with the input data
-
             val saveButton = dialogLayout.findViewById<Button>(R.id.save_button)
             saveButton.setOnClickListener {
                 val title = editTitle.text.toString()
@@ -60,11 +79,16 @@ class MyAlertDialog {
                 val date = dateButton.text.toString()
                 val label = labelSpinner.selectedItem.toString()
                 val task = TaskModel(0, taskTitle = title, taskDetails = details, taskDate = date, taskLabel = label)
+                onCreateTaskListener?.onCreateTask(task)
                 dbHelper.addTask(task) // Add the task to the database
                 val addedList = dbHelper.getAllTasks()
                 taskadapter = TaskAdapter(context)
                 taskadapter?.addList(addedList)
                 taskList = addedList
+
+
+
+
                 // Finish the activity
                 if (context is Activity) {
                     context.finish()
@@ -101,6 +125,8 @@ class MyAlertDialog {
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         dialog.show()
     }
+
+
 
     private fun overridePendingTransition(i: Int, i1: Int) {
 

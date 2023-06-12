@@ -1,20 +1,17 @@
 package com.amadeus.ting
 
 
-import android.app.Activity
+import android.Manifest
+import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.ColorStateList
-import android.graphics.Color
 import android.os.Bundle
-import android.transition.TransitionManager
-import android.transition.AutoTransition
-import android.util.Log
 import android.view.View
-import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
 import android.widget.ToggleButton
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -23,18 +20,11 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SnapHelper
 import com.amadeus.ting.databinding.ActivityPlannerBinding
 import com.google.android.material.imageview.ShapeableImageView
-import java.text.SimpleDateFormat
-import java.util.*
 import java.time.LocalDate
-import android.Manifest
-import android.content.pm.PackageManager
-import android.media.MediaPlayer
-import android.view.animation.Animation
-import android.view.animation.AnimationUtils
-import android.widget.ImageView
+import java.util.*
 
 
-class Planner : AppCompatActivity(), CalendarAdapter.OnDateClickListener{
+class Planner : AppCompatActivity(), CalendarAdapter.OnDateClickListener, MyAlertDialog.OnCreateTaskListener{
 
     private lateinit var binding: ActivityPlannerBinding
     private lateinit var calendarAdapter: CalendarAdapter
@@ -45,10 +35,13 @@ class Planner : AppCompatActivity(), CalendarAdapter.OnDateClickListener{
     private var sortedTaskList: List<TaskModel> = emptyList()
     private var checkedTaskList: List<TaskModel> = emptyList()
     private var isDoneTasksVisible = false
-
+    private var uniqueNotifID = 0
+    private var addedTask: TaskModel?= null
 
     private val calendarData = CalendarData()
     private val notificationSystem:NotificationSystem = NotificationSystem(this)
+
+    // For Notification permissions
     private val requestPermissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ){
@@ -69,6 +62,7 @@ class Planner : AppCompatActivity(), CalendarAdapter.OnDateClickListener{
 
         binding = ActivityPlannerBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        createNotificationChannel()
         val dbHelper = TingDatabase(applicationContext)
 
         setUpAdapter()
@@ -128,6 +122,7 @@ class Planner : AppCompatActivity(), CalendarAdapter.OnDateClickListener{
         // Create -> Jugu
         onClick<ShapeableImageView>(R.id.create_button) {
             val labelAlert = MyAlertDialog()
+            labelAlert.setOnCreateTaskListener(this)
             labelAlert.showCustomDialog(this, R.layout.create_popupwindow, -1, -1, 1)
         }
 
@@ -177,6 +172,81 @@ class Planner : AppCompatActivity(), CalendarAdapter.OnDateClickListener{
         }
 
 
+    }
+    // Generating unique notif IDs to create multiple notifications
+    private fun genNotifID(): Int{
+        uniqueNotifID += 1
+        return uniqueNotifID
+    }
+
+    private fun setNotif(timeData : String){
+        val intent = Intent(this, AlarmReceiver::class.java)
+        val title = "Planner Deadlines"
+        val message = "You have tasks due in an hour, hope you haven't forgotten!"
+        val notifID = genNotifID()
+        intent.putExtra(titleExtra, title)
+        intent.putExtra(messageExtra, message)
+        val pendingIntent = PendingIntent.getBroadcast(
+            applicationContext,
+            notifID,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val time = extractTimeAttributes(timeData)
+        alarmManager.setExactAndAllowWhileIdle(
+            AlarmManager.RTC_WAKEUP,
+            time,
+            pendingIntent
+        )
+        showAlert(time, title, message)
+    }
+
+    // Used to extract the time attributes from the taskDate string format
+    private fun extractTimeAttributes(dateString: String): Long {
+        // Make the case for ALL DAY cases, else:
+
+        // Cleaning up the string and getting rid of unnecessary symbols
+        var cleanedString = dateString.replace("|", "")
+        cleanedString = cleanedString.replace("⏰", "")
+
+        // Dealing with whitespace characters
+        val dateTimeComponents = cleanedString.split("\\s+".toRegex())
+        val date = dateTimeComponents[0]
+        val time = dateTimeComponents[1]
+        val amPmIndicator = dateTimeComponents[2]
+
+        // Distinguishing the minute from the hour
+        val timeComponents = time.split(":")
+        var hour = timeComponents[0].toInt()
+        val minute = timeComponents[1].toInt()
+
+        val dateComponents = date.split("/")
+        val month = dateComponents[0].toInt() - 1 // Adjust month value to zero-based index
+        val day = dateComponents[1].toInt()
+        val year = dateComponents[2].toInt()
+
+        // Subtracted them by 1 beforehand so that the notifs play an hour before the deadline
+        // Feel free to experiment with the values
+        if(amPmIndicator == "PM" && hour != 12){
+            hour += 11
+        }
+        else{
+            hour -= 1
+        }
+
+        if(amPmIndicator == "AM" && hour == 12){
+            hour = 23
+        }
+        //if (amPmIndicator == "PM" && hour != 12) {
+        //    hour += 12
+        //} else if (amPmIndicator == "AM" && hour == 12) {
+        //    hour = 0
+        //}
+
+        val calendar = Calendar.getInstance()
+        calendar.set(year, month, day, hour, minute)
+        return calendar.timeInMillis
     }
 
     private fun initRecyclerView(){
@@ -229,7 +299,7 @@ class Planner : AppCompatActivity(), CalendarAdapter.OnDateClickListener{
         // Line below requires debugging, need to check why it doesn't function
     }
     private fun setUpCalendar() {
-        val calendarList = java.util.ArrayList<CalendarDateModel>()
+        val calendarList = ArrayList<CalendarDateModel>()
         binding.tvDateMonth.text = calendarData.dateFormat.format(calendarData.currentDate.time)
         val monthCalendar = calendarData.currentDate.clone() as Calendar
         val maxDaysInMonth = calendarData.currentDate.getActualMaximum(Calendar.DAY_OF_MONTH)
@@ -250,6 +320,32 @@ class Planner : AppCompatActivity(), CalendarAdapter.OnDateClickListener{
             action(it as T)
         }
     }
+    // Notification Channel for the Planner
+    private fun createNotificationChannel() {
+        val name = "Notif Channel"
+        val desc = "A Description of the Channel"
+        val importance = NotificationManager.IMPORTANCE_DEFAULT
+        val channel = NotificationChannel(channelID, name, importance)
+        channel.description = desc
+        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.createNotificationChannel(channel)
+    }
+    // Responsible for showing the notification
+    private fun showAlert(time: Long, title: String, message: String)
+    {
+        val date = Date(time)
+        val dateFormat = android.text.format.DateFormat.getLongDateFormat(applicationContext)
+        val timeFormat = android.text.format.DateFormat.getTimeFormat(applicationContext)
+
+        AlertDialog.Builder(this)
+            .setTitle("Notification Scheduled")
+            .setMessage(
+                "Title: " + title +
+                        "\nMessage: " + message +
+                        "\nAt: " + dateFormat.format(date) + " " + timeFormat.format(date))
+            .setPositiveButton("Okay"){_,_ ->}
+            .show()
+    }
 
     //Method called by the adapter to display the tasks for each date
     override fun onDateClick(position: Int) {
@@ -257,6 +353,10 @@ class Planner : AppCompatActivity(), CalendarAdapter.OnDateClickListener{
         val dateModel = calendarAdapter.getItem(position)
         taskadapter?.addList(tskList, dateModel)
 
+    }
+    //Method called to acquire the taskDate from the alertdialog and to pass it onto the setNotif method
+    override fun onCreateTask(task: TaskModel) {
+        setNotif(task.taskDate)
     }
 
 }
