@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.media.MediaPlayer
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.view.View
 import android.view.WindowManager
 import android.view.animation.Animation
@@ -75,8 +76,10 @@ class HomePage : AppCompatActivity() {
         val shake: Animation = AnimationUtils.loadAnimation(this, R.anim.shakeanimation)
         val imgBell = findViewById<View>(R.id.applogo) as ImageView
         imgBell.setImageResource(R.drawable.logo)
+
         music.start()
-        imgBell.startAnimation(shake)
+        Handler().postDelayed({
+            imgBell.startAnimation(shake)}, 100)
     }
 
     fun changeMessage(currentTime: Date) {
