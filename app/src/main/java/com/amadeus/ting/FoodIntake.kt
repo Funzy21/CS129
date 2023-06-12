@@ -225,7 +225,6 @@ class FoodIntake : AppCompatActivity(), CalendarAdapter.OnDateClickListener {
     }
 
 
-
     private inline fun <reified T : View> Activity.onClick(
         id: Int,
         crossinline action: (T) -> Unit
