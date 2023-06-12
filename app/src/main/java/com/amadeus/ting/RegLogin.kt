@@ -104,7 +104,6 @@ class RegLogin : AppCompatActivity() {
     }
 
     private fun handleResultsLogIn(task: Task<GoogleSignInAccount>) {
-
         if (task.isSuccessful) {
             val account : GoogleSignInAccount? = task.result
             if (account != null) {
@@ -121,11 +120,7 @@ class RegLogin : AppCompatActivity() {
                                 } else {
                                     // Email is already registered
                                     // Direct the user to the home page
-                                    val intent = Intent(this, HomePage::class.java)
-                                    intent.putExtra("email", account.email)
-                                    intent.putExtra("name", account.displayName)
-                                    intent.putExtra("profileImage", account.photoUrl?.toString())
-                                    startActivity(intent)
+                                    updateUI(account)
                                 }
                             } else {
                                 // Error occurred while fetching sign-in methods
