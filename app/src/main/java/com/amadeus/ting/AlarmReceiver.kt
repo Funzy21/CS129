@@ -17,7 +17,7 @@ class AlarmReceiver : BroadcastReceiver()
     override fun onReceive(context: Context, intent: Intent)
     {
         val notification = NotificationCompat.Builder(context, channelID)
-            .setSmallIcon(R.drawable.email)
+            .setSmallIcon(R.drawable.app_logo)
             .setContentTitle(intent.getStringExtra(titleExtra))
             .setContentText(intent.getStringExtra(messageExtra))
             .setGroup(GROUP_KEY_TASK)

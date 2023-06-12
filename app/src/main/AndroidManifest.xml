@@ -94,10 +94,7 @@
             android:name=".AlarmReceiver"
             android:enabled="true"/>
 
-        <receiver
-            android:name=".ResetListReceiver"
-            android:enabled="true"
-            android:exported="true"/>
+
         <receiver android:name=".ResetListReceiver"
             android:exported="true"
             android:permission="TODO"
