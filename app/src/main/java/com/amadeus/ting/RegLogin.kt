@@ -104,7 +104,6 @@ class RegLogin : AppCompatActivity() {
     }
 
     private fun handleResultsLogIn(task: Task<GoogleSignInAccount>) {
-
         if (task.isSuccessful) {
             val account : GoogleSignInAccount? = task.result
             if (account != null) {
