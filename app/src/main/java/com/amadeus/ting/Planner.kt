@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.widget.Toast
 import android.widget.ToggleButton
@@ -205,48 +206,68 @@ class Planner : AppCompatActivity(), CalendarAdapter.OnDateClickListener, MyAler
     // Used to extract the time attributes from the taskDate string format
     private fun extractTimeAttributes(dateString: String): Long {
         // Make the case for ALL DAY cases, else:
-
         // Cleaning up the string and getting rid of unnecessary symbols
-        var cleanedString = dateString.replace("|", "")
-        cleanedString = cleanedString.replace("⏰", "")
+        var cleanedString = dateString.substringAfter("|")
+        if (cleanedString.contains("⏰")){
+//                Log.d("TESTT", cleanedString)
 
-        // Dealing with whitespace characters
-        val dateTimeComponents = cleanedString.split("\\s+".toRegex())
-        val date = dateTimeComponents[0]
-        val time = dateTimeComponents[1]
-        val amPmIndicator = dateTimeComponents[2]
+                cleanedString = dateString.replace("|", "")
+                cleanedString = cleanedString.replace("⏰", "")
 
-        // Distinguishing the minute from the hour
-        val timeComponents = time.split(":")
-        var hour = timeComponents[0].toInt()
-        val minute = timeComponents[1].toInt()
 
-        val dateComponents = date.split("/")
-        val month = dateComponents[0].toInt() - 1 // Adjust month value to zero-based index
-        val day = dateComponents[1].toInt()
-        val year = dateComponents[2].toInt()
+                // Dealing with whitespace characters
+                val dateTimeComponents = cleanedString.split("\\s+".toRegex())
+                val date = dateTimeComponents[0]
+                val time = dateTimeComponents[1]
+                val amPmIndicator = dateTimeComponents[2]
 
-        // Subtracted them by 1 beforehand so that the notifs play an hour before the deadline
-        // Feel free to experiment with the values
-        if(amPmIndicator == "PM" && hour != 12){
-            hour += 11
+                // Distinguishing the minute from the hour
+                val timeComponents = time.split(":")
+                var hour = timeComponents[0].toInt()
+                val minute = timeComponents[1].toInt()
+
+                val dateComponents = date.split("/")
+                val month = dateComponents[0].toInt() - 1 // Adjust month value to zero-based index
+                val day = dateComponents[1].toInt()
+                val year = dateComponents[2].toInt()
+
+                // Subtracted them by 1 beforehand so that the notifs play an hour before the deadline
+                // Feel free to experiment with the values
+                if (amPmIndicator == "PM" && hour != 12) {
+                    hour += 11
+                } else {
+                    hour -= 1
+                }
+
+                if (amPmIndicator == "AM" && hour == 12) {
+                    hour = 23
+                }
+            val calendar = Calendar.getInstance()
+            calendar.set(year, month, day, hour, minute)
+            return calendar.timeInMillis
+
         }
+        // FOR ALLDAY
         else{
-            hour -= 1
-        }
+//            Log.d("TESTT", cleanedString)
 
-        if(amPmIndicator == "AM" && hour == 12){
-            hour = 23
-        }
-        //if (amPmIndicator == "PM" && hour != 12) {
-        //    hour += 12
-        //} else if (amPmIndicator == "AM" && hour == 12) {
-        //    hour = 0
-        //}
+            cleanedString = dateString.replace("|", "")
+            cleanedString = cleanedString.replace("☀", "")
 
-        val calendar = Calendar.getInstance()
-        calendar.set(year, month, day, hour, minute)
-        return calendar.timeInMillis
+            // Dealing with whitespace characters
+            val dateTimeComponents = cleanedString.split("\\s+".toRegex())
+            val date = dateTimeComponents[0]
+
+
+            val dateComponents = date.split("/")
+            val month = dateComponents[0].toInt() - 1 // Adjust month value to zero-based index
+            val day = dateComponents[1].toInt()
+            val year = dateComponents[2].toInt()
+
+            val calendar = Calendar.getInstance()
+            calendar.set(year, month, day-1, 0, 0)
+            return calendar.timeInMillis
+        }
     }
 
     private fun initRecyclerView(){
